@@ -26,6 +26,7 @@
     \ingroup libgerbv
 */
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -2068,14 +2069,22 @@ simplify_aperture_macro(gerbv_aperture_t *aperture, gdouble scale)
 	case GERBV_OPCODE_PUSH :
 	    push(s, ip->data.fval);
 	    break;
-        case GERBV_OPCODE_PPUSH :
-	    push(s, lp[ip->data.ival - 1]);
+        case GERBV_OPCODE_PPUSH : {
+	    ssize_t const idx = ip->data.ival - 1;
+	    if ((idx < 0) || (idx >= APERTURE_PARAMETERS_MAX))
+		GERB_FATAL_ERROR(_("Tried to access oob aperture"));
+	    push(s, lp[idx]);
 	    break;
-	case GERBV_OPCODE_PPOP:
+	}
+	case GERBV_OPCODE_PPOP: {
 	    if (pop(s, &tmp[0]) < 0)
 		GERB_FATAL_ERROR(_("Tried to pop an empty stack"));
-	    lp[ip->data.ival - 1] = tmp[0];
+	    ssize_t const idx = ip->data.ival - 1;
+	    if ((idx < 0) || (idx >= APERTURE_PARAMETERS_MAX))
+		GERB_FATAL_ERROR(_("Tried to access oob aperture"));
+	    lp[idx] = tmp[0];
 	    break;
+	}
 	case GERBV_OPCODE_ADD :
 	    if (pop(s, &tmp[0]) < 0)
 		GERB_FATAL_ERROR(_("Tried to pop an empty stack"));
