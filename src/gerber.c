@@ -28,8 +28,10 @@
 
 #include "gerbv.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <math.h>  /* pow() */
 #include <errno.h>
 #include <ctype.h>
@@ -1935,14 +1937,22 @@ simplify_aperture_macro(gerbv_aperture_t *aperture, gdouble scale)
 	case GERBV_OPCODE_PUSH :
 	    push(s, ip->data.fval);
 	    break;
-        case GERBV_OPCODE_PPUSH :
-	    push(s, lp[ip->data.ival - 1]);
+        case GERBV_OPCODE_PPUSH : {
+	    ssize_t const idx = ip->data.ival - 1;
+	    if ((idx < 0) || (idx >= APERTURE_PARAMETERS_MAX))
+		GERB_FATAL_ERROR(_("Tried to access oob aperture"));
+	    push(s, lp[idx]);
 	    break;
-	case GERBV_OPCODE_PPOP:
+	}
+	case GERBV_OPCODE_PPOP: {
 	    if (pop(s, &tmp[0]) < 0)
 		GERB_FATAL_ERROR(_("Tried to pop an empty stack"));
-	    lp[ip->data.ival - 1] = tmp[0];
+	    ssize_t const idx = ip->data.ival - 1;
+	    if ((idx < 0) || (idx >= APERTURE_PARAMETERS_MAX))
+		GERB_FATAL_ERROR(_("Tried to access oob aperture"));
+	    lp[idx] = tmp[0];
 	    break;
+	}
 	case GERBV_OPCODE_ADD :
 	    if (pop(s, &tmp[0]) < 0)
 		GERB_FATAL_ERROR(_("Tried to pop an empty stack"));
@@ -1993,8 +2003,22 @@ simplify_aperture_macro(gerbv_aperture_t *aperture, gdouble scale)
 		 * - number of points defined in entry 1 of the stack + 
 		 *   start point. Times two since it is both X and Y.
 		 * - Then three more; exposure,  nuf points and rotation.
+		 *
+		 * @warning Calculation must be guarded against signed integer
+		 *     overflow
+		 *
+		 * @see CVE-2021-40394
 		 */
-		nuf_parameters = ((int)s->stack[1] + 1) * 2 + 3;
+		int const sstack = (int)s->stack[1];
+		if ((sstack < 0) || (sstack >= INT_MAX / 4)) {
+			GERB_COMPILE_ERROR(_("Possible signed integer overflow "
+					"in calculating number of parameters "
+					"to aperture macro, will clamp to "
+					"(%d)"), APERTURE_PARAMETERS_MAX);
+			nuf_parameters = APERTURE_PARAMETERS_MAX;
+		} else {
+			nuf_parameters = (sstack + 1) * 2 + 3;
+		}
 		break;
 	    case 5 :
 		dprintf("  Aperture macro polygon [5] (");
